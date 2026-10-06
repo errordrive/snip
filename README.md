@@ -1,4 +1,4 @@
-# Snip v3 — private pastebin · paste · share · raw
+# Snip v4 — private pastebin · paste · share · raw
 
 A minimal pastebin **with private spaces**. Every account gets its own private space —
 nobody can see another user's pastes. A paste is visible to others **only** via its link.
@@ -20,6 +20,10 @@ One process serves the frontend, the JSON API, and raw output.
 - **Guest pastes auto-delete after 7 days**, even if "never" was chosen.
 - **Public / unlisted** visibility, recent public feed, view counts.
 - Minimal monochrome UI (Space Grotesk + Inter + JetBrains Mono), English only, light/dark mode.
+- **Performance (v3.1.0)** — gzip compression for all text responses (~70% smaller),
+  batched view counts (DB write once per 10s, flushed on shutdown), smart cache
+  headers (SPA shell always revalidates; link-only pastes cache 60s with
+  stale-while-revalidate; private pastes never cached).
 
 ## Run locally
 
@@ -49,6 +53,25 @@ pm2 start server.js --name snip
 
 **Anywhere Node runs:** set `PORT` env if needed (`PORT=8080 node server.js`).
 No build step, no `npm install`.
+
+### Instant propagation (CDN purge-on-update) — optional
+
+For the remote-config use case (APK update dialogs reading `/raw/:id`), Snip can
+purge the CDN cache the moment a paste is created/edited/deleted, so users get
+the new config within seconds instead of waiting for the 60s cache TTL.
+
+This only matters when a CDN (e.g. Cloudflare) sits in front of Snip — set
+these three env vars on the host (Render → Environment):
+
+| Env var | Example |
+|---|---|
+| `CF_API_TOKEN` | Cloudflare API token with **Cache Purge** permission for the zone |
+| `CF_ZONE_ID` | the zone id of the domain in front of Snip |
+| `CF_PURGE_PREFIX` | public base URL the CDN serves, e.g. `https://cfg.nctti.tech` |
+
+When any of them is unset, the purge hook silently no-ops (local dev, or no
+CDN yet). Purge failures are logged but never break the API response.
+Private pastes are `no-store`, so only unlisted pastes trigger purges.
 
 ## API
 
