@@ -1,10 +1,20 @@
-# Snip — paste · share · raw
+# Snip v2 — paste · share · raw
 
-A minimal pastebin. Paste text or code, get a short link, share it.
+A minimal pastebin **with accounts**. Paste text or code, get a short link, share it.
 Raw view serves pure `text/plain` — perfect for `curl`.
 
 **Stack:** Node.js (zero dependencies, built-in `node:sqlite`) + single SQLite file.
 One process serves the frontend, the JSON API, and raw output.
+
+## Features
+
+- **Accounts** — sign up / log in; your pastes follow you to any device you log in on.
+- **My Pastes** — dashboard with search, edit, delete.
+- **Edit & delete** — owners can edit title/content/syntax/visibility/expiry.
+- **Expiry** — 10 min / 1 hour / 1 day / 1 week / never. Expired pastes auto-delete.
+- **Guest pastes auto-delete after 7 days**, even if "never" was chosen.
+- **Public / unlisted** visibility, recent public feed, view counts.
+- Minimal monochrome UI (Space Grotesk + Inter + JetBrains Mono), English only, light/dark mode.
 
 ## Run locally
 
@@ -15,7 +25,7 @@ node server.js
 # → http://localhost:3000
 ```
 
-The SQLite file `snip.db` is created automatically on first run.
+The SQLite file `snip.db` is created automatically on first run (v1 databases migrate cleanly).
 
 ## Deploy
 
