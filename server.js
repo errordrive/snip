@@ -14,8 +14,9 @@ const { DatabaseSync } = require('node:sqlite');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const zlib = require('node:zlib');
 
-const VERSION = '3.0.0';
+const VERSION = '4.0.0';
 const PORT = Number(process.env.PORT || 3000);
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'snip.db');
 const PUBLIC = path.join(__dirname, 'public');
@@ -23,6 +24,12 @@ const MAX_CONTENT = 512 * 1024;   // max paste size, in characters
 const MAX_BODY = 1024 * 1024;     // max request body, in bytes
 const GUEST_MAX_AGE = 7 * 86400 * 1000; // guest pastes auto-delete after 7 days
 const SESSION_AGE = 30 * 86400 * 1000;  // login sessions last 30 days
+// CDN purge-on-update (optional, env-gated — no-ops when unset):
+// When an unlisted paste changes, Snip tells Cloudflare to drop the cached
+// /raw/:id copy so the next request gets the fresh version within seconds.
+const CF_API_TOKEN = process.env.CF_API_TOKEN || '';
+const CF_ZONE_ID = process.env.CF_ZONE_ID || '';
+const CF_PURGE_PREFIX = (process.env.CF_PURGE_PREFIX || '').replace(/\/+$/, ''); // e.g. https://cfg.nctti.tech
 
 // ---------------------------------------------------------------- database
 const db = new DatabaseSync(DB_PATH);
@@ -171,7 +178,20 @@ function createPaste({ title, content, syntax, visibility, expiresIn, userId }) 
 }
 const getStmt = db.prepare('SELECT * FROM pastes WHERE id = ?');
 const delStmt = db.prepare('DELETE FROM pastes WHERE id = ?');
-const viewStmt = db.prepare('UPDATE pastes SET views = views + 1 WHERE id = ?');
+// View counts are batched in memory and flushed to SQLite every 10s — one
+// flood-era UPDATE per paste per view would serialize all writes on the DB.
+const pendingViews = new Map(); // id -> increments since last flush
+function bumpViews(id) { pendingViews.set(id, (pendingViews.get(id) || 0) + 1); }
+function flushViews() {
+  if (!pendingViews.size) return;
+  const batch = [...pendingViews];
+  pendingViews.clear();
+  const stmt = db.prepare('UPDATE pastes SET views = views + ? WHERE id = ?');
+  for (const [id, n] of batch) {
+    try { stmt.run(n, id); } catch (e) { console.error('view flush failed for', id, e.message); }
+  }
+}
+setInterval(flushViews, 10 * 1000).unref();
 function getPaste(id) {
   const row = getStmt.get(id);
   if (!row) return null;
@@ -236,29 +256,65 @@ const MIME = {
 const CSP = "default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com 'unsafe-inline'; " +
   "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; " +
   "img-src 'self' data:; connect-src 'self'";
+const COMPRESSIBLE = /^(text\/|application\/(json|javascript))|svg\+xml/;
 function send(res, status, body, type = 'text/plain; charset=utf-8', extra = {}) {
-  const buf = Buffer.isBuffer(body) ? body : Buffer.from(body);
+  let buf = Buffer.isBuffer(body) ? body : Buffer.from(body);
   const headers = {
     'Content-Type': type,
-    'Content-Length': buf.length,
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'no-referrer',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
   };
   if (type.startsWith('text/html')) headers['Content-Security-Policy'] = CSP;
+  // gzip: browsers/CDNs ask for it; ~70-80% smaller text payloads, near-zero CPU
+  const ae = String((res.req && res.req.headers && res.req.headers['accept-encoding']) || '');
+  if (COMPRESSIBLE.test(type) && buf.length >= 1024 && /\bgzip\b/.test(ae)) {
+    buf = zlib.gzipSync(buf);
+    headers['Content-Encoding'] = 'gzip';
+    headers['Vary'] = 'Accept-Encoding';
+  }
+  headers['Content-Length'] = buf.length;
   res.writeHead(status, Object.assign(headers, extra));
   res.end(buf);
 }
 const sendJSON = (res, status, obj, extra) =>
   send(res, status, JSON.stringify(obj), 'application/json; charset=utf-8', extra);
 
+// Purge the CDN-cached /raw/:id copy after an unlisted paste changes.
+// Env-gated: silently skips when CF_API_TOKEN/CF_ZONE_ID/CF_PURGE_PREFIX
+// are unset (e.g. local dev, or no CDN in front yet). Fire-and-forget — a
+// purge failure must never break the API response.
+function purgeRawCache(id) {
+  if (!CF_API_TOKEN || !CF_ZONE_ID || !CF_PURGE_PREFIX) return;
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 8000);
+  fetch(`https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache`, {
+    method: 'POST',
+    signal: ctl.signal,
+    headers: { 'Authorization': `Bearer ${CF_API_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files: [`${CF_PURGE_PREFIX}/raw/${id}`] }),
+  }).then(async (r) => {
+    clearTimeout(t);
+    if (!r.ok) console.error(`[purge] CF purge failed for ${id}: HTTP ${r.status}`);
+  }).catch((e) => {
+    clearTimeout(t);
+    console.error(`[purge] CF purge error for ${id}: ${e.message || e}`);
+  });
+}
+
 function serveFile(res, filePath, extra = {}) {
   const safe = path.normalize(filePath);
   if (!safe.startsWith(PUBLIC + path.sep) && safe !== PUBLIC) return send(res, 403, 'forbidden');
   fs.readFile(safe, (err, data) => {
     if (err) return send(res, 404, 'not found');
-    send(res, 200, data, MIME[path.extname(safe).toLowerCase()] || 'application/octet-stream', extra);
+    // index.html = SPA shell, always revalidate so deploys reach users instantly;
+    // other static files: cache 1h, serve stale up to 1d while revalidating.
+    const cc = path.basename(safe) === 'index.html'
+      ? 'no-cache'
+      : 'public, max-age=3600, stale-while-revalidate=86400';
+    send(res, 200, data, MIME[path.extname(safe).toLowerCase()] || 'application/octet-stream',
+      Object.assign({ 'Cache-Control': cc }, extra));
   });
 }
 function readBody(req) {
@@ -426,6 +482,7 @@ const server = http.createServer(async (req, res) => {
         visibility: input.visibility, expiresIn: input.expiresIn,
         userId: user ? user.id : null,
       });
+      if (input.visibility === 'unlisted') purgeRawCache(id); // fresh paste → drop any stale CDN copy
       return sendJSON(res, 201, {
         id, url: '/' + id, raw_url: '/raw/' + id,
         expires_at: expiresAt, guest: !user,
@@ -439,10 +496,14 @@ const server = http.createServer(async (req, res) => {
       const row = getPaste(id);
       if (!row || !canView(row, user))
         return sendJSON(res, 404, { error: 'Paste not found or expired.' });
-      viewStmt.run(id);
+      bumpViews(id); // batched — DB flush every 10s, no per-view write lock
       const out = publicPaste(row, user);
-      out.views = row.views + 1;
-      return sendJSON(res, 200, out);
+      out.views = row.views + (pendingViews.get(id) || 0);
+      // private pastes: never cached. unlisted: 60s cache + stale-while-revalidate.
+      const cc = row.visibility === 'unlisted'
+        ? 'public, max-age=60, stale-while-revalidate=300'
+        : 'no-store';
+      return sendJSON(res, 200, out, { 'Cache-Control': cc });
     }
 
     if (method === 'PUT' && p.startsWith('/api/paste/')) {
@@ -470,6 +531,9 @@ const server = http.createServer(async (req, res) => {
       db.prepare(`UPDATE pastes SET title=?, content=?, syntax=?, visibility=?, expires_at=?, updated_at=?
                   WHERE id=?`)
         .run(patch.title, patch.content, patch.syntax, patch.visibility, patch.expires_at, now, id);
+      // purge when the paste was or still is unlisted: edits go out in seconds,
+      // and a paste flipped to private must not linger in the CDN cache.
+      if (row.visibility === 'unlisted' || patch.visibility === 'unlisted') purgeRawCache(id);
       return sendJSON(res, 200, { ok: true, id });
     }
 
@@ -481,7 +545,9 @@ const server = http.createServer(async (req, res) => {
       const row = getPaste(id);
       if (!row || row.user_id !== user.id)
         return sendJSON(res, 404, { error: 'Paste not found.' });
+      const wasUnlisted = row.visibility === 'unlisted';
       delStmt.run(id);
+      if (wasUnlisted) purgeRawCache(id); // deleted → don't let the CDN keep serving it
       return sendJSON(res, 200, { ok: true });
     }
 
@@ -513,8 +579,16 @@ const server = http.createServer(async (req, res) => {
       const user = authUser(req);
       const row = getPaste(id);
       if (!row || !canView(row, user)) return send(res, 404, 'not found or expired');
+      const etag = '"' + crypto.createHash('sha1').update(row.content).digest('hex') + '"';
+      if (req.headers['if-none-match'] === etag) {
+        res.writeHead(304, { 'ETag': etag });
+        return res.end();
+      }
+      const cc = row.visibility === 'unlisted'
+        ? 'public, max-age=60, stale-while-revalidate=300'
+        : 'no-store';
       return send(res, 200, row.content, 'text/plain; charset=utf-8',
-        { 'X-Robots-Tag': 'noindex, nofollow' });
+        { 'X-Robots-Tag': 'noindex, nofollow', 'Cache-Control': cc, 'ETag': etag });
     }
 
     // ---------------- frontend (SPA) ----------------
@@ -544,6 +618,7 @@ server.listen(PORT, () => {
 });
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down…');
+  flushViews(); // never lose batched view counts on a deploy/restart
   server.close(() => { db.close(); process.exit(0); });
   setTimeout(() => process.exit(0), 8000).unref();
 });
