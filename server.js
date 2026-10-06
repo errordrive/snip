@@ -1,7 +1,13 @@
-// Snip v2 — minimal pastebin with accounts.
+// Snip v3 — private-by-default pastebin with accounts. Production-ready.
 // Zero dependencies. Requires Node 22+.
 // One process serves the frontend + JSON API + raw text output.
 // Data: single SQLite file (snip.db), auto-created + migrated on boot.
+//
+// Privacy model:
+//   - Every paste belongs to an account's private space (or a guest link).
+//   - visibility = 'private'  → only the owner can open it.
+//   - visibility = 'unlisted' → anyone with the link can open it.
+//   - There is NO public listing. Nobody can discover another user's pastes.
 
 const http = require('node:http');
 const { DatabaseSync } = require('node:sqlite');
@@ -9,6 +15,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const VERSION = '3.0.0';
 const PORT = Number(process.env.PORT || 3000);
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'snip.db');
 const PUBLIC = path.join(__dirname, 'public');
@@ -19,15 +26,19 @@ const SESSION_AGE = 30 * 86400 * 1000;  // login sessions last 30 days
 
 // ---------------------------------------------------------------- database
 const db = new DatabaseSync(DB_PATH);
+db.exec('PRAGMA journal_mode = WAL');
+db.exec('PRAGMA busy_timeout = 5000');
 db.exec(`CREATE TABLE IF NOT EXISTS pastes (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL DEFAULT '',
   content TEXT NOT NULL,
   syntax TEXT NOT NULL DEFAULT 'plaintext',
-  visibility TEXT NOT NULL DEFAULT 'public',
+  visibility TEXT NOT NULL DEFAULT 'private',
   created_at INTEGER NOT NULL,
+  updated_at INTEGER,
   expires_at INTEGER,
-  views INTEGER NOT NULL DEFAULT 0
+  views INTEGER NOT NULL DEFAULT 0,
+  user_id TEXT
 )`);
 db.exec(`CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
@@ -41,14 +52,16 @@ db.exec(`CREATE TABLE IF NOT EXISTS sessions (
   created_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL
 )`);
-// v1 → v2 migration
+// migrations (v1 → v2 → v3), idempotent
 {
   const cols = db.prepare(`PRAGMA table_info(pastes)`).all().map((c) => c.name);
   if (!cols.includes('user_id')) db.exec(`ALTER TABLE pastes ADD COLUMN user_id TEXT`);
   if (!cols.includes('updated_at')) db.exec(`ALTER TABLE pastes ADD COLUMN updated_at INTEGER`);
   db.exec(`UPDATE pastes SET updated_at = created_at WHERE updated_at IS NULL`);
+  // v3: no public listing anymore — old public pastes become link-only
+  db.exec(`UPDATE pastes SET visibility = 'unlisted' WHERE visibility = 'public'`);
+  db.exec(`UPDATE pastes SET visibility = 'unlisted' WHERE user_id IS NULL AND visibility <> 'unlisted'`);
 }
-db.exec(`CREATE INDEX IF NOT EXISTS idx_pastes_recent ON pastes (visibility, created_at DESC)`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_pastes_user ON pastes (user_id, updated_at DESC)`);
 
 const SYNTAXES = new Set([
@@ -57,6 +70,7 @@ const SYNTAXES = new Set([
   'markdown','diff',
 ]);
 const EXPIRY_OPTIONS = new Set([600, 3600, 86400, 604800]); // 10m 1h 1d 1w
+const VISIBILITIES = new Set(['private', 'unlisted']);
 
 // ------------------------------------------------------------------ auth
 function hashPassword(pw) {
@@ -116,7 +130,6 @@ function destroySession(req) {
   }
 }
 function sessionCookieHeaders(req, token) {
-  // token === null → clear the cookie
   const secure = req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
   const value = token === null
     ? `snip_session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0${secure}`
@@ -140,7 +153,8 @@ function createPaste({ title, content, syntax, visibility, expiresIn, userId }) 
   const now = Date.now();
   let expiresAt = expiresIn ? now + expiresIn * 1000 : null;
   if (!userId) {
-    // guests: pastes auto-delete after 7 days no matter what
+    // guests: link-only + auto-delete after 7 days no matter what
+    visibility = 'unlisted';
     const cap = now + GUEST_MAX_AGE;
     expiresAt = expiresAt ? Math.min(expiresAt, cap) : cap;
   }
@@ -158,22 +172,26 @@ function createPaste({ title, content, syntax, visibility, expiresIn, userId }) 
 const getStmt = db.prepare('SELECT * FROM pastes WHERE id = ?');
 const delStmt = db.prepare('DELETE FROM pastes WHERE id = ?');
 const viewStmt = db.prepare('UPDATE pastes SET views = views + 1 WHERE id = ?');
-function getPaste(id, countView) {
+function getPaste(id) {
   const row = getStmt.get(id);
   if (!row) return null;
   if (row.expires_at && row.expires_at < Date.now()) {
     delStmt.run(id); // lazy expiry
     return null;
   }
-  if (countView) viewStmt.run(id);
   return row;
 }
-function publicPaste(row) {
+// Privacy gate: private → owner only; unlisted → anyone with the link.
+function canView(row, user) {
+  if (user && row.user_id && row.user_id === user.id) return true;
+  return row.visibility === 'unlisted';
+}
+function publicPaste(row, user) {
   return {
     id: row.id, title: row.title, content: row.content, syntax: row.syntax,
     visibility: row.visibility, created_at: row.created_at, updated_at: row.updated_at,
     expires_at: row.expires_at, views: row.views,
-    owner: !!row.user_id,
+    mine: !!(user && row.user_id && row.user_id === user.id),
   };
 }
 
@@ -215,24 +233,32 @@ const MIME = {
   '.ico': 'image/x-icon',
   '.txt': 'text/plain; charset=utf-8',
 };
+const CSP = "default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com 'unsafe-inline'; " +
+  "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; " +
+  "img-src 'self' data:; connect-src 'self'";
 function send(res, status, body, type = 'text/plain; charset=utf-8', extra = {}) {
   const buf = Buffer.isBuffer(body) ? body : Buffer.from(body);
-  res.writeHead(status, Object.assign({
+  const headers = {
     'Content-Type': type,
     'Content-Length': buf.length,
     'X-Content-Type-Options': 'nosniff',
-  }, extra));
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  };
+  if (type.startsWith('text/html')) headers['Content-Security-Policy'] = CSP;
+  res.writeHead(status, Object.assign(headers, extra));
   res.end(buf);
 }
 const sendJSON = (res, status, obj, extra) =>
   send(res, status, JSON.stringify(obj), 'application/json; charset=utf-8', extra);
 
-function serveFile(res, filePath) {
+function serveFile(res, filePath, extra = {}) {
   const safe = path.normalize(filePath);
   if (!safe.startsWith(PUBLIC + path.sep) && safe !== PUBLIC) return send(res, 403, 'forbidden');
   fs.readFile(safe, (err, data) => {
     if (err) return send(res, 404, 'not found');
-    send(res, 200, data, MIME[path.extname(safe).toLowerCase()] || 'application/octet-stream');
+    send(res, 200, data, MIME[path.extname(safe).toLowerCase()] || 'application/octet-stream', extra);
   });
 }
 function readBody(req) {
@@ -262,7 +288,7 @@ function pasteInput(data, forUpdate) {
   if (data.syntax !== undefined || !forUpdate)
     out.syntax = SYNTAXES.has(data.syntax) ? data.syntax : 'plaintext';
   if (data.visibility !== undefined || !forUpdate)
-    out.visibility = data.visibility === 'unlisted' ? 'unlisted' : 'public';
+    out.visibility = VISIBILITIES.has(data.visibility) ? data.visibility : 'private';
   if (data.expires_in !== undefined || !forUpdate)
     out.expiresIn = data.expires_in === null ? null
       : EXPIRY_OPTIONS.has(data.expires_in) ? data.expires_in : null;
@@ -271,12 +297,22 @@ function pasteInput(data, forUpdate) {
 
 // ---------------------------------------------------------------- routes
 const server = http.createServer(async (req, res) => {
+  const t0 = Date.now();
   const url = new URL(req.url, 'http://x');
   const p = url.pathname;
   const method = req.method;
   const ip = req.socket.remoteAddress || 'unknown';
+  res.on('finish', () => {
+    if (process.env.LOG_REQUESTS)
+      console.log(new Date().toISOString(), method, p, res.statusCode, Date.now() - t0 + 'ms');
+  });
 
   try {
+    // ---------------- health ----------------
+    if (method === 'GET' && p === '/api/health') {
+      return sendJSON(res, 200, { ok: true, version: VERSION, time: Date.now() });
+    }
+
     // ---------------- auth ----------------
     if (method === 'POST' && p === '/api/auth/signup') {
       if (limited('auth:' + ip, 10, 10 * 60 * 1000))
@@ -310,7 +346,6 @@ const server = http.createServer(async (req, res) => {
       const password = typeof data.password === 'string' ? data.password : '';
       const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
       const ok = user && await verifyPassword(password, user.pw);
-      // constant-ish timing on failure; generic message either way
       if (!ok) return sendJSON(res, 401, { error: 'Invalid username or password.' });
       const token = createSession(user.id);
       return sendJSON(res, 200, { username: user.username }, sessionCookieHeaders(req, token));
@@ -325,6 +360,55 @@ const server = http.createServer(async (req, res) => {
       const u = authUser(req);
       return u ? sendJSON(res, 200, { username: u.username })
                : sendJSON(res, 401, { error: 'Not logged in.' });
+    }
+
+    if (method === 'POST' && p === '/api/auth/change-password') {
+      const user = authUser(req);
+      if (!user) return sendJSON(res, 401, { error: 'Not logged in.' });
+      let data;
+      try { data = JSON.parse(await readBody(req)); }
+      catch { return sendJSON(res, 400, { error: 'Invalid JSON body.' }); }
+      const current = typeof data.current === 'string' ? data.current : '';
+      const next = typeof data.new === 'string' ? data.new : '';
+      if (next.length < 8)
+        return sendJSON(res, 400, { error: 'New password must be at least 8 characters.' });
+      const row = db.prepare('SELECT pw FROM users WHERE id = ?').get(user.id);
+      if (!row || !(await verifyPassword(current, row.pw)))
+        return sendJSON(res, 401, { error: 'Current password is incorrect.' });
+      db.prepare('UPDATE users SET pw = ? WHERE id = ?').run(await hashPassword(next), user.id);
+      db.prepare('DELETE FROM sessions WHERE user_id = ? AND token <> ?')
+        .run(user.id, crypto.createHash('sha256')
+          .update(parseCookies(req).snip_session || '').digest('hex'));
+      return sendJSON(res, 200, { ok: true });
+    }
+
+    if (method === 'DELETE' && p === '/api/auth/account') {
+      const user = authUser(req);
+      if (!user) return sendJSON(res, 401, { error: 'Not logged in.' });
+      let data;
+      try { data = JSON.parse(await readBody(req)); }
+      catch { return sendJSON(res, 400, { error: 'Invalid JSON body.' }); }
+      const password = typeof data.password === 'string' ? data.password : '';
+      const row = db.prepare('SELECT pw FROM users WHERE id = ?').get(user.id);
+      if (!row || !(await verifyPassword(password, row.pw)))
+        return sendJSON(res, 401, { error: 'Password is incorrect.' });
+      db.prepare('DELETE FROM pastes WHERE user_id = ?').run(user.id);
+      db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+      db.prepare('DELETE FROM users WHERE id = ?').run(user.id);
+      return sendJSON(res, 200, { ok: true }, sessionCookieHeaders(req, null));
+    }
+
+    if (method === 'GET' && p === '/api/export') {
+      const user = authUser(req);
+      if (!user) return sendJSON(res, 401, { error: 'Not logged in.' });
+      const rows = db.prepare(
+        `SELECT id, title, content, syntax, visibility, created_at, updated_at, expires_at, views
+         FROM pastes WHERE user_id = ? ORDER BY created_at`
+      ).all(user.id);
+      return send(res, 200,
+        JSON.stringify({ exported_at: Date.now(), username: user.username, pastes: rows }, null, 2),
+        'application/json; charset=utf-8',
+        { 'Content-Disposition': 'attachment; filename="snip-export.json"' });
     }
 
     // ---------------- pastes ----------------
@@ -351,12 +435,13 @@ const server = http.createServer(async (req, res) => {
     if (method === 'GET' && p.startsWith('/api/paste/')) {
       const id = p.slice('/api/paste/'.length);
       if (!/^[A-Za-z0-9]{7}$/.test(id)) return sendJSON(res, 404, { error: 'Paste not found.' });
-      const row = getPaste(id, true);
-      if (!row) return sendJSON(res, 404, { error: 'Paste not found or expired.' });
-      const out = publicPaste(row);
-      out.views = row.views + 1;
       const user = authUser(req);
-      out.mine = !!(user && row.user_id && row.user_id === user.id);
+      const row = getPaste(id);
+      if (!row || !canView(row, user))
+        return sendJSON(res, 404, { error: 'Paste not found or expired.' });
+      viewStmt.run(id);
+      const out = publicPaste(row, user);
+      out.views = row.views + 1;
       return sendJSON(res, 200, out);
     }
 
@@ -365,7 +450,7 @@ const server = http.createServer(async (req, res) => {
       if (!user) return sendJSON(res, 401, { error: 'Log in to edit pastes.' });
       const id = p.slice('/api/paste/'.length);
       if (!/^[A-Za-z0-9]{7}$/.test(id)) return sendJSON(res, 404, { error: 'Paste not found.' });
-      const row = getPaste(id, false);
+      const row = getPaste(id);
       if (!row || row.user_id !== user.id)
         return sendJSON(res, 404, { error: 'Paste not found.' });
       let data;
@@ -393,7 +478,7 @@ const server = http.createServer(async (req, res) => {
       if (!user) return sendJSON(res, 401, { error: 'Log in to delete pastes.' });
       const id = p.slice('/api/paste/'.length);
       if (!/^[A-Za-z0-9]{7}$/.test(id)) return sendJSON(res, 404, { error: 'Paste not found.' });
-      const row = getPaste(id, false);
+      const row = getPaste(id);
       if (!row || row.user_id !== user.id)
         return sendJSON(res, 404, { error: 'Paste not found.' });
       delStmt.run(id);
@@ -403,37 +488,43 @@ const server = http.createServer(async (req, res) => {
     if (method === 'GET' && p === '/api/my') {
       const user = authUser(req);
       if (!user) return sendJSON(res, 401, { error: 'Log in to see your pastes.' });
+      const q = (url.searchParams.get('q') || '').trim().slice(0, 60).replace(/[%_]/g, '');
+      const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '50', 10) || 50, 1), 100);
+      const offset = Math.max(parseInt(url.searchParams.get('offset') || '0', 10) || 0, 0);
+      const like = `%${q}%`;
       const rows = db.prepare(
         `SELECT id, title, syntax, visibility, created_at, updated_at, expires_at, views
-         FROM pastes WHERE user_id = ? AND (expires_at IS NULL OR expires_at > ?)
-         ORDER BY updated_at DESC`
-      ).all(user.id, Date.now());
-      return sendJSON(res, 200, { pastes: rows });
-    }
-
-    if (method === 'GET' && p === '/api/recent') {
-      const rows = db.prepare(
-        `SELECT id, title, syntax, created_at, views FROM pastes
-         WHERE visibility = 'public' AND (expires_at IS NULL OR expires_at > ?)
-         ORDER BY created_at DESC LIMIT 20`
-      ).all(Date.now());
-      return sendJSON(res, 200, { pastes: rows });
+         FROM pastes
+         WHERE user_id = ? AND (expires_at IS NULL OR expires_at > ?)
+           AND (? = '' OR title LIKE ? OR content LIKE ?)
+         ORDER BY updated_at DESC LIMIT ? OFFSET ?`
+      ).all(user.id, Date.now(), q, like, like, limit, offset);
+      const total = db.prepare(
+        `SELECT COUNT(*) AS c FROM pastes
+         WHERE user_id = ? AND (expires_at IS NULL OR expires_at > ?)
+           AND (? = '' OR title LIKE ? OR content LIKE ?)`
+      ).get(user.id, Date.now(), q, like, like).c;
+      return sendJSON(res, 200, { pastes: rows, total, limit, offset });
     }
 
     if (method === 'GET' && p.startsWith('/raw/')) {
       const id = p.slice('/raw/'.length);
       if (!/^[A-Za-z0-9]{7}$/.test(id)) return send(res, 404, 'not found');
-      const row = getPaste(id, false);
-      if (!row) return send(res, 404, 'not found or expired');
-      return send(res, 200, row.content, 'text/plain; charset=utf-8');
+      const user = authUser(req);
+      const row = getPaste(id);
+      if (!row || !canView(row, user)) return send(res, 404, 'not found or expired');
+      return send(res, 200, row.content, 'text/plain; charset=utf-8',
+        { 'X-Robots-Tag': 'noindex, nofollow' });
     }
 
     // ---------------- frontend (SPA) ----------------
     if (method === 'GET' && (
-      p === '/' || p === '/new' || p === '/login' || p === '/signup' || p === '/my' ||
+      p === '/' || p === '/new' || p === '/login' || p === '/signup' ||
+      p === '/my' || p === '/settings' ||
       /^\/[A-Za-z0-9]{7}$/.test(p) || /^\/[A-Za-z0-9]{7}\/edit$/.test(p)
     )) {
-      return serveFile(res, path.join(PUBLIC, 'index.html'));
+      const extra = /^\/[A-Za-z0-9]{7}/.test(p) ? { 'X-Robots-Tag': 'noindex, nofollow' } : {};
+      return serveFile(res, path.join(PUBLIC, 'index.html'), extra);
     }
 
     if (method === 'GET' && !p.startsWith('/api/')) {
@@ -449,5 +540,10 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Snip v2 running on http://localhost:${PORT} (db: ${DB_PATH})`);
+  console.log(`Snip v${VERSION} running on http://localhost:${PORT} (db: ${DB_PATH})`);
+});
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down…');
+  server.close(() => { db.close(); process.exit(0); });
+  setTimeout(() => process.exit(0), 8000).unref();
 });
