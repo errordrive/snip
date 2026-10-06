@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Snip — paste · share · raw</title>
-<meta name="description" content="Snip is a minimal pastebin with accounts. Paste text or code, get a link, keep it forever.">
+<meta name="description" content="Snip is a private pastebin. Your pastes live in your space — only you, or anyone with your link.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' rx='8' fill='%231B1B1D'/%3E%3Crect x='9' y='10' width='14' height='2.6' rx='1.3' fill='white'/%3E%3Crect x='9' y='15' width='14' height='2.6' rx='1.3' fill='white'/%3E%3Crect x='9' y='20' width='9' height='2.6' rx='1.3' fill='white'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -33,7 +33,6 @@ html[data-theme="dark"]{
 body{background:var(--paper);color:var(--ink);font-family:var(--font-b);
   -webkit-font-smoothing:antialiased;min-height:100vh}
 .wrap{max-width:660px;margin:0 auto;padding:20px 16px 64px}
-.d{font-family:var(--font-d)}
 /* ---------- header ---------- */
 .head{display:flex;align-items:center;gap:14px;margin-bottom:20px}
 .logo{display:flex;align-items:center;gap:10px;cursor:pointer;text-decoration:none;color:inherit}
@@ -56,7 +55,7 @@ body{background:var(--paper);color:var(--ink);font-family:var(--font-b);
 .btn-solid{background:var(--primary);color:var(--onp);border:0;border-radius:999px;
   padding:9px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:var(--font-b)}
 .userchip{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);
-  border-radius:999px;padding:6px 8px 6px 12px;font-size:13px;font-weight:600}
+  border-radius:999px;padding:6px 8px 6px 12px;font-size:13px;font-weight:600;cursor:pointer}
 /* ---------- cards & forms ---------- */
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;
   padding:22px;margin-bottom:14px;box-shadow:var(--shadow)}
@@ -69,46 +68,46 @@ body{background:var(--paper);color:var(--ink);font-family:var(--font-b);
 .input:focus,.area:focus,.sel:focus{outline:2px solid var(--primary);border-color:var(--primary)}
 .area{min-height:160px;resize:vertical;font-family:var(--font-m);font-size:12.5px;line-height:1.65}
 .row{display:flex;gap:10px}.row>div{flex:1}
-.seg{display:flex;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:3px}
-.seg button{flex:1;border:0;background:transparent;padding:9px 4px;border-radius:8px;
-  font-size:12.5px;font-weight:700;color:var(--muted);cursor:pointer;font-family:var(--font-b)}
-.seg button.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
+.visgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.visopt{border:1px solid var(--line);background:var(--paper);border-radius:12px;padding:13px 14px;
+  cursor:pointer;text-align:left;font-family:var(--font-b);color:var(--ink)}
+.visopt.on{border-color:var(--primary);background:var(--card);box-shadow:var(--shadow)}
+.visopt .vt{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13.5px;margin-bottom:4px}
+.visopt .vd{font-size:12px;color:var(--muted);line-height:1.45}
 .cta{width:100%;margin-top:18px;background:var(--primary);color:var(--onp);border:0;
   border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;
   font-family:var(--font-d);letter-spacing:-.2px}
 .cta:disabled{opacity:.5;cursor:default}
-.note{text-align:center;font-size:12px;color:var(--faint);margin-top:10px}
+.note{text-align:center;font-size:12px;color:var(--faint);margin-top:10px;line-height:1.6}
 .err{background:var(--danger-soft);color:var(--danger);border:1px solid currentColor;
   border-radius:10px;padding:10px 13px;font-size:13px;margin-top:12px;display:none;opacity:.9}
+.okmsg{background:var(--soft);color:var(--inksoft);border:1px solid var(--line);
+  border-radius:10px;padding:10px 13px;font-size:13px;margin-top:12px;display:none}
 .auth-switch{text-align:center;font-size:13px;color:var(--muted);margin-top:14px}
 .auth-switch a{color:var(--ink);font-weight:600}
-/* ---------- tabs ---------- */
-.tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--line)}
-.tab{border:0;background:transparent;padding:10px 14px;font-size:13.5px;font-weight:600;
-  color:var(--faint);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:var(--font-b)}
-.tab.on{color:var(--ink);border-bottom-color:var(--primary);font-weight:700}
 /* ---------- paste list ---------- */
 .item{display:flex;align-items:center;gap:12px;padding:14px 2px;border-top:1px solid var(--line);
   cursor:pointer;text-decoration:none;color:inherit}
 .item:first-of-type{border-top:0}
-.item:hover .it{color:var(--ink)}
 .chip{font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:999px;
-  background:var(--soft);color:var(--inksoft);white-space:nowrap}
+  background:var(--soft);color:var(--inksoft);white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
 .chip.dim{background:transparent;border:1px solid var(--line);color:var(--muted)}
 .it{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.im{font-size:11.5px;color:var(--faint);margin-top:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.im{font-size:11.5px;color:var(--faint);margin-top:3px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .pid{font-family:var(--font-m);font-size:11px;color:var(--muted);white-space:nowrap}
 .rowbtns{display:flex;gap:4px}
 .mini-btn{width:32px;height:32px;border-radius:9px;border:1px solid transparent;background:transparent;
   color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
 .mini-btn:hover{background:var(--soft);color:var(--ink)}
 .mini-btn.danger:hover{background:var(--danger-soft);color:var(--danger)}
-.empty{padding:28px 12px;color:var(--faint);font-size:13px;text-align:center}
+.empty{padding:28px 12px;color:var(--faint);font-size:13px;text-align:center;line-height:1.7}
 .empty svg{opacity:.5;margin-bottom:10px}
 .searchbar{display:flex;align-items:center;gap:8px;background:var(--paper);border:1px solid var(--line);
   border-radius:10px;padding:0 12px;margin:12px 0 4px;color:var(--muted)}
 .searchbar input{flex:1;border:0;background:transparent;padding:11px 0;font-size:13.5px;color:var(--ink);font-family:var(--font-b)}
 .searchbar input:focus{outline:none}
+.morebtn{width:100%;margin-top:10px;background:transparent;border:1px solid var(--line);color:var(--inksoft);
+  border-radius:10px;padding:11px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font-b)}
 /* ---------- view ---------- */
 .vtitle{font-family:var(--font-d);font-size:20px;font-weight:700;letter-spacing:-.4px;overflow-wrap:anywhere}
 .meta{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--faint);margin:10px 0 14px;align-items:center}
@@ -120,7 +119,7 @@ body{background:var(--paper);color:var(--ink);font-family:var(--font-b);
   border:1px solid var(--line);background:var(--card);color:var(--inksoft);font-family:var(--font-b);
   display:flex;align-items:center;justify-content:center;gap:7px}
 .btn.pri{background:var(--primary);border-color:var(--primary);color:var(--onp);font-weight:700}
-.btn.danger{color:var(--danger);border-color:var(--line)}
+.btn.danger{color:var(--danger)}
 .linkrow{display:flex;gap:8px;margin-top:12px}
 .linkrow .input{font-family:var(--font-m);font-size:12px}
 /* minimal hljs theme */
@@ -138,17 +137,18 @@ body{background:var(--paper);color:var(--ink);font-family:var(--font-b);
   padding:20px;z-index:100;opacity:0;pointer-events:none;transition:opacity .18s}
 .overlay.show{opacity:1;pointer-events:auto}
 .modal{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;
-  max-width:380px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.18)}
-.modal .h{margin-bottom:6px}
+  max-width:400px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.18)}
 .modal-btns{display:flex;gap:10px;margin-top:18px}
 .modal-btns .btn{margin:0}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
   background:var(--ink);color:var(--paper);padding:11px 20px;border-radius:999px;
   font-size:13px;font-weight:600;opacity:0;transition:all .25s;pointer-events:none;z-index:200;
-  display:flex;align-items:center;gap:8px}
+  display:flex;align-items:center;gap:8px;max-width:90vw}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.danger-zone{border-color:var(--danger)}
+.danger-zone .h{color:var(--danger)}
 footer{text-align:center;margin-top:28px;font-size:11.5px;color:var(--faint)}
-@media (max-width:520px){ .nav{display:none} .row{flex-direction:column} }
+@media (max-width:520px){ .nav{display:none} .row{flex-direction:column} .visgrid{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
@@ -156,13 +156,13 @@ footer{text-align:center;margin-top:28px;font-size:11.5px;color:var(--faint)}
   <div class="head">
     <a class="logo" href="/" data-nav>
       <span class="logo-mark" id="logoMark"></span>
-      <span><span class="name">Snip</span><br><span class="tag">paste · share · raw</span></span>
+      <span><span class="name">Snip</span><br><span class="tag">private pastebin</span></span>
     </a>
     <div class="nav" id="mainNav"></div>
     <div class="head-r" id="headR"></div>
   </div>
   <div id="app"></div>
-  <footer>Snip — minimal pastebin · your pastes, everywhere you log in</footer>
+  <footer>Snip — your private space · only you, or anyone with your link</footer>
 </div>
 <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
 <div class="toast" id="toast"></div>
@@ -173,11 +173,11 @@ footer{text-align:center;margin-top:28px;font-size:11.5px;color:var(--faint)}
 const $ = (s, r) => (r||document).querySelector(s);
 
 /* ================= icon set ================= */
-const P = (inner, vb) => `<svg width="16" height="16" viewBox="${vb||'0 0 24 24'}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+const P = (inner) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+const sm = (svg) => svg.replace('width="16" height="16"', 'width="12" height="12"');
 const I = {
   sun: P('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
   moon: P('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'),
-  plus: P('<path d="M12 5v14M5 12h14"/>'),
   copy: P('<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
   check: P('<path d="M20 6L9 17l-5-5"/>'),
   download: P('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>'),
@@ -190,10 +190,10 @@ const I = {
   user: P('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),
   logout: P('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'),
   x: P('<path d="M18 6L6 18M6 6l12 12"/>'),
-  chev: P('<path d="M9 18l6-6-6-6"/>'),
   file: P('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>'),
-  globe: P('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/>'),
   lock: P('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
+  link: P('<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>'),
+  cog: P('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.9 2.9l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.9-2.9l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.9-2.9l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.9 2.9l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
 };
 $('#logoMark').innerHTML = `<svg width="20" height="20" viewBox="0 0 32 32"><rect x="9" y="9" width="14" height="2.8" rx="1.4" fill="var(--onp)"/><rect x="9" y="14.6" width="14" height="2.8" rx="1.4" fill="var(--onp)"/><rect x="9" y="20.2" width="9" height="2.8" rx="1.4" fill="var(--onp)"/></svg>`;
 
@@ -209,7 +209,7 @@ root.dataset.theme = initTheme;
 /* ================= helpers ================= */
 function toast(msg, ic){ const t = $('#toast'); t.innerHTML = (ic||I.check) + '<span></span>';
   t.querySelector('span').textContent = msg; t.classList.add('show');
-  clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove('show'), 2200); }
+  clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove('show'), 2400); }
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function ago(ts){ const s = Math.max(1, Math.floor((Date.now()-ts)/1000));
   if (s < 60) return s + 's ago'; const m = Math.floor(s/60);
@@ -219,17 +219,16 @@ function ago(ts){ const s = Math.max(1, Math.floor((Date.now()-ts)/1000));
 function until(ts){ if(!ts) return 'never'; const s = Math.floor((ts-Date.now())/1000);
   if (s <= 0) return 'expired'; if (s < 3600) return 'in ' + Math.floor(s/60) + 'm';
   if (s < 86400) return 'in ' + Math.floor(s/3600) + 'h'; return 'in ' + Math.floor(s/86400) + 'd'; }
-function confirmModal(title, sub, okLabel, onOk){
-  const m = $('#modal');
-  m.innerHTML = `<div class="h">${esc(title)}</div><div class="sub">${esc(sub)}</div>
+function openModal(html){ $('#modal').innerHTML = html; $('#overlay').classList.add('show'); }
+function closeModal(){ $('#overlay').classList.remove('show'); }
+$('#overlay').addEventListener('click', e => { if (e.target.id === 'overlay') closeModal(); });
+function confirmModal(title, sub, okLabel, onOk, danger){
+  openModal(`<div class="h">${esc(title)}</div><div class="sub">${esc(sub)}</div>
     <div class="modal-btns"><button class="btn" id="m-cancel">Cancel</button>
-    <button class="btn pri" id="m-ok" style="background:var(--danger);border-color:var(--danger);color:#fff">${esc(okLabel)}</button></div>`;
-  $('#overlay').classList.add('show');
+    <button class="btn pri" id="m-ok"${danger ? ' style="background:var(--danger);border-color:var(--danger);color:#fff"' : ''}>${esc(okLabel)}</button></div>`);
   $('#m-cancel').onclick = closeModal;
   $('#m-ok').onclick = () => { closeModal(); onOk(); };
 }
-function closeModal(){ $('#overlay').classList.remove('show'); }
-$('#overlay').addEventListener('click', e => { if (e.target.id === 'overlay') closeModal(); });
 
 const SYNTAXES = [
   ['plaintext','Plain text'],['bash','Bash'],['javascript','JavaScript'],['typescript','TypeScript'],
@@ -245,6 +244,11 @@ async function api(path, opts){
   if (!r.ok) throw new Error(d.error || 'Something went wrong.');
   return d;
 }
+function visChip(v){
+  return v === 'private'
+    ? `<span class="chip">${sm(I.lock)} private</span>`
+    : `<span class="chip">${sm(I.link)} link</span>`;
+}
 
 /* ================= auth state ================= */
 let me = null;
@@ -254,16 +258,15 @@ async function refreshMe(){
 }
 function renderHead(){
   renderThemeBtn();
-  const nav = $('#mainNav');
   const path = location.pathname;
-  nav.innerHTML =
+  $('#mainNav').innerHTML =
     `<button data-nav href="/" class="${path==='/'?'on':''}">New</button>` +
-    (me ? `<button data-nav href="/my" class="${path==='/my'?'on':''}">My Pastes</button>` : '');
-  const hr = $('#headR');
-  hr.innerHTML = `<button class="iconbtn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme"></button>` +
+    (me ? `<button data-nav href="/my" class="${path==='/my'?'on':''}">My Pastes</button>
+           <button data-nav href="/settings" class="${path==='/settings'?'on':''}">Settings</button>` : '');
+  $('#headR').innerHTML = `<button class="iconbtn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme"></button>` +
     (me
-      ? `<span class="userchip">${I.user}<span>${esc(me.username)}</span>
-           <button class="mini-btn" id="logoutBtn" title="Log out">${I.logout}</button></span>`
+      ? `<span class="userchip" data-nav href="/settings" title="Settings">${I.user}<span>${esc(me.username)}</span></span>
+         <button class="iconbtn" id="logoutBtn" title="Log out">${I.logout}</button>`
       : `<button class="btn-ghost" data-nav href="/login">Log in</button>
          <button class="btn-solid" data-nav href="/signup">Sign up</button>`);
   renderThemeBtn();
@@ -276,11 +279,11 @@ function go(path){ history.pushState(null,'',path); route(); window.scrollTo(0,0
 function route(){
   const p = location.pathname;
   let m;
-  if (p === '/' || p === '/new') renderHome('create');
-  else if (p === '/recent') renderHome('recent');
+  if (p === '/' || p === '/new') renderHome();
   else if (p === '/login') renderAuth('login');
   else if (p === '/signup') renderAuth('signup');
   else if (p === '/my') renderMy();
+  else if (p === '/settings') renderSettings();
   else if ((m = p.match(/^\/([A-Za-z0-9]{7})\/edit$/))) renderEdit(m[1]);
   else if ((m = p.match(/^\/([A-Za-z0-9]{7})$/))) renderView(m[1]);
   else renderNotFound();
@@ -292,21 +295,11 @@ document.addEventListener('click', e => {
 });
 window.addEventListener('popstate', route);
 
-/* ================= home (create + recent tabs) ================= */
-function renderHome(tab){
-  const app = $('#app');
-  app.innerHTML =
-  `<div class="tabs">
-     <button class="tab ${tab==='create'?'on':''}" data-nav href="/">New paste</button>
-     <button class="tab ${tab==='recent'?'on':''}" data-nav href="/recent">Recent</button>
-   </div><div id="tabBody"></div>`;
-  if (tab === 'recent') renderRecentTab(); else renderCreateTab();
-}
-function renderCreateTab(){
-  const box = $('#tabBody');
-  box.innerHTML =
+/* ================= home ================= */
+function renderHome(){
+  $('#app').innerHTML =
   `<div class="card"><div class="h">New paste</div>
-   <div class="sub">Paste text or code — get a link.</div>
+   <div class="sub">${me ? 'Saved to your private space.' : 'No account needed — but it stays temporary.'}</div>
    <label class="label">Title</label>
    <input class="input" id="f-title" maxlength="120" placeholder="untitled" autocomplete="off">
    <label class="label">Content</label>
@@ -315,25 +308,34 @@ function renderCreateTab(){
      SYNTAXES.map(s=>`<option value="${s[0]}">${s[1]}</option>`).join('')}</select></div>
    <div><label class="label">Expires</label><select class="sel" id="f-exp">${
      EXPIRY.map(x=>`<option value="${x[0]}"${x[0]===604800?' selected':''}>${x[1]}</option>`).join('')}</select></div></div>
-   <label class="label">Visibility</label>
-   <div class="seg" id="f-vis"><button class="on" data-v="public">Public</button><button data-v="unlisted">Unlisted</button></div>
+   <label class="label">Who can open it</label>
+   <div class="visgrid" id="f-vis">
+     <button class="visopt on" data-v="private"><span class="vt">${I.lock} Private</span>
+       <span class="vd">Only you. Nobody else can open it, even with the link.</span></button>
+     <button class="visopt" data-v="unlisted"><span class="vt">${I.link} Link only</span>
+       <span class="vd">Anyone with the link can open it. Not listed anywhere.</span></button>
+   </div>
    <div class="err" id="f-err"></div>
    <button class="cta" id="f-go">Create paste</button>
-   <div class="note">${me ? 'Saved to your account · access anywhere you log in'
-     : 'No account · instant link · <b>guest pastes auto-delete after 7 days</b> — <a data-nav href="/signup" style="color:var(--ink);font-weight:600">sign up</a> to keep them'}</div></div>`;
-  let vis = 'public';
+   <div class="note">${me ? 'Private by default · your space, your rules'
+     : 'Guest pastes are link-only and <b>auto-delete after 7 days</b> — <a data-nav href="/signup" style="color:var(--ink);font-weight:600">sign up</a> for a private space that keeps them'}</div></div>
+   ${me ? '' : `<div class="card"><div class="h">Why sign up?</div>
+   <div class="sub" style="line-height:1.7">Your own private space — pastes stay separate from everyone else's.
+   Edit them later, keep them forever, open them from any device you log in on.</div>
+   <button class="btn pri" data-nav href="/signup" style="width:100%">Create free account</button></div>`}`;
+  let vis = 'private';
+  const setVis = (v) => { vis = v;
+    $('#f-vis').querySelectorAll('.visopt').forEach(x=>x.classList.toggle('on', x.dataset.v===v)); };
   $('#f-vis').addEventListener('click', e => {
-    const b = e.target.closest('button'); if(!b) return;
-    vis = b.dataset.v;
-    $('#f-vis').querySelectorAll('button').forEach(x=>x.classList.toggle('on', x===b));
+    const b = e.target.closest('.visopt'); if(!b) return; setVis(b.dataset.v);
   });
+  if (!me) setVis('unlisted'); // guests have no private space
   const errBox = $('#f-err');
-  const showErr = m => { errBox.textContent = m; errBox.style.display = 'block'; };
   $('#f-go').onclick = async () => {
     const btn = $('#f-go');
     const content = $('#f-content').value;
-    if (!content.trim()){ showErr('Content is empty.'); return; }
-    if (content.length > 512*1024){ showErr('Paste is too large (max 512 KB).'); return; }
+    if (!content.trim()){ errBox.textContent = 'Content is empty.'; errBox.style.display = 'block'; return; }
+    if (content.length > 512*1024){ errBox.textContent = 'Paste is too large (max 512 KB).'; errBox.style.display = 'block'; return; }
     btn.disabled = true; btn.textContent = 'Creating…'; errBox.style.display = 'none';
     try{
       const d = await api('/api/paste', { method:'POST',
@@ -343,24 +345,9 @@ function renderCreateTab(){
           expires_in: $('#f-exp').value === '' ? null : Number($('#f-exp').value) }) });
       go(d.url);
       if (d.guest) setTimeout(()=>toast('Guest paste — auto-deletes in 7 days', I.clock), 600);
-    }catch(e){ showErr(e.message); btn.disabled = false; btn.textContent = 'Create paste'; }
+    }catch(e){ errBox.textContent = e.message; errBox.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Create paste'; }
   };
-}
-async function renderRecentTab(){
-  const box = $('#tabBody');
-  box.innerHTML = `<div class="card"><div class="h">Recent</div>
-    <div class="sub">Fresh public pastes from everyone.</div><div id="recent"><div class="empty">${I.file}<br>Loading…</div></div></div>`;
-  try{
-    const d = await api('/api/recent');
-    const el = $('#recent'); if(!el) return;
-    if (!d.pastes.length){ el.innerHTML = `<div class="empty">${I.file}<br>No public pastes yet. Be the first.</div>`; return; }
-    el.innerHTML = d.pastes.map(p =>
-      `<a class="item" data-nav href="/${p.id}"><span class="chip">${esc(syntaxLabel(p.syntax))}</span>
-       <div style="flex:1;min-width:0"><div class="it">${esc(p.title||'untitled')}</div>
-       <div class="im"><span>${I.clock.replace('width="16" height="16"','width="12" height="12"')} ${ago(p.created_at)}</span>
-       <span>${I.eye.replace('width="16" height="16"','width="12" height="12"')} ${p.views}</span></div></div>
-       <span class="pid">${p.id}</span>${I.chev}</a>`).join('');
-  }catch(e){ const el = $('#recent'); if(el) el.innerHTML = `<div class="empty">Could not load.</div>`; }
 }
 
 /* ================= auth pages ================= */
@@ -369,7 +356,7 @@ function renderAuth(mode){
   $('#app').innerHTML =
   `<div class="card" style="max-width:420px;margin:24px auto">
      <div class="h">${isLogin ? 'Welcome back' : 'Create your account'}</div>
-     <div class="sub">${isLogin ? 'Log in to access your pastes anywhere.' : 'Your pastes follow you — any device, any login.'}</div>
+     <div class="sub">${isLogin ? 'Log in to open your private space anywhere.' : 'Your own private space — separate from everyone else.'}</div>
      <label class="label">Username</label>
      <input class="input" id="a-user" maxlength="20" autocomplete="username" placeholder="e.g. nayem_07">
      <label class="label">Password</label>
@@ -391,13 +378,13 @@ function renderAuth(mode){
         headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username, password }) });
       me = { username: d.username };
       toast(isLogin ? 'Welcome back, ' + d.username : 'Account created — welcome!');
-      go(me ? '/my' : '/');
+      go('/my');
     }catch(e){ errBox.textContent = e.message; errBox.style.display = 'block';
       btn.disabled = false; btn.textContent = isLogin ? 'Log in' : 'Sign up'; }
   };
   $('#a-go').onclick = submit;
   $('#a-pass').addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
-  setTimeout(()=>$('#a-user').focus(), 50);
+  setTimeout(()=>{ const u = $('#a-user'); if(u) u.focus(); }, 50);
 }
 
 /* ================= my pastes ================= */
@@ -405,35 +392,44 @@ async function renderMy(){
   const app = $('#app');
   if (!me){
     app.innerHTML = `<div class="card" style="text-align:center;padding:36px 22px">
-      <div class="h">Your pastes live here</div>
-      <div class="sub">Log in to see every paste you've created — on any device.</div>
+      <div class="h">Your private space</div>
+      <div class="sub">Log in to see your pastes — separate from everyone else's.</div>
       <div style="display:flex;gap:10px;justify-content:center;margin-top:14px">
         <button class="btn-ghost" data-nav href="/login">Log in</button>
         <button class="btn-solid" data-nav href="/signup">Sign up</button></div></div>`;
     return;
   }
   app.innerHTML = `<div class="card"><div class="h">My Pastes</div>
-    <div class="sub">Everything you've saved · click a row to open</div>
+    <div class="sub">Your private space · <span id="cnt"></span></div>
     <div class="searchbar">${I.search}<input id="q" placeholder="Search your pastes…" autocomplete="off"></div>
-    <div id="mine"><div class="empty">${I.file}<br>Loading…</div></div></div>`;
-  let all = [];
-  try{ all = (await api('/api/my')).pastes; }
-  catch(e){ $('#mine').innerHTML = `<div class="empty">Could not load.</div>`; return; }
-  const draw = (f) => {
+    <div id="mine"><div class="empty">${I.file}<br>Loading…</div></div>
+    <div id="moreWrap"></div></div>`;
+  let items = [], total = 0, offset = 0, query = '';
+  const LIMIT = 30;
+  const load = async (reset) => {
+    if (reset){ offset = 0; items = []; }
+    const d = await api('/api/my?q=' + encodeURIComponent(query) + '&limit=' + LIMIT + '&offset=' + offset);
+    total = d.total; items = items.concat(d.pastes); offset += d.pastes.length;
+    draw();
+  };
+  const draw = () => {
     const el = $('#mine'); if(!el) return;
-    const list = all.filter(p => !f || (p.title||'untitled').toLowerCase().includes(f));
-    if (!list.length){ el.innerHTML = `<div class="empty">${I.file}<br>${f ? 'No matches.' : 'Nothing here yet — create your first paste.'}</div>`; return; }
-    el.innerHTML = list.map(p =>
+    $('#cnt').textContent = total ? total + (total === 1 ? ' paste' : ' pastes') : '';
+    if (!items.length){ el.innerHTML = `<div class="empty">${I.file}<br>${query ? 'No matches.' : 'Nothing here yet — create your first paste.'}</div>`; }
+    else el.innerHTML = items.map(p =>
       `<div class="item" data-open="${p.id}">
         <span class="chip">${esc(syntaxLabel(p.syntax))}</span>
         <div style="flex:1;min-width:0"><div class="it">${esc(p.title||'untitled')}</div>
-        <div class="im"><span class="chip dim">${p.visibility}</span>
-          <span>${I.clock.replace('width="16" height="16"','width="12" height="12"')} exp ${until(p.expires_at)}</span>
-          <span>${I.eye.replace('width="16" height="16"','width="12" height="12"')} ${p.views}</span></div></div>
+        <div class="im">${visChip(p.visibility)}
+          <span>${sm(I.clock)} exp ${until(p.expires_at)}</span>
+          <span>${sm(I.eye)} ${p.views}</span></div></div>
         <div class="rowbtns">
           <button class="mini-btn" data-edit="${p.id}" title="Edit">${I.pencil}</button>
           <button class="mini-btn danger" data-del="${p.id}" title="Delete">${I.trash}</button>
         </div></div>`).join('');
+    $('#moreWrap').innerHTML = offset < total
+      ? `<button class="morebtn" id="moreBtn">Show more (${total - offset} left)</button>` : '';
+    const mb = $('#moreBtn'); if (mb) mb.onclick = () => load(false).catch(()=>toast('Could not load', I.x));
     el.querySelectorAll('[data-open]').forEach(row => row.addEventListener('click', e => {
       if (e.target.closest('[data-edit],[data-del]')) return;
       go('/' + row.dataset.open);
@@ -441,17 +437,75 @@ async function renderMy(){
     el.querySelectorAll('[data-edit]').forEach(b => b.onclick = e => { e.stopPropagation(); go('/' + b.dataset.edit + '/edit'); });
     el.querySelectorAll('[data-del]').forEach(b => b.onclick = e => {
       e.stopPropagation();
-      const p = all.find(x => x.id === b.dataset.del);
+      const p = items.find(x => x.id === b.dataset.del);
       confirmModal('Delete paste?', `"${p.title || 'untitled'}" will be gone forever.`, 'Delete', async () => {
         try{ await api('/api/paste/' + p.id, { method:'DELETE' });
-          all = all.filter(x => x.id !== p.id); draw($('#q').value.trim().toLowerCase());
+          items = items.filter(x => x.id !== p.id); total--; draw();
           toast('Paste deleted', I.trash);
         }catch(err){ toast(err.message, I.x); }
-      });
+      }, true);
     });
   };
-  draw('');
-  $('#q').addEventListener('input', e => draw(e.target.value.trim().toLowerCase()));
+  try{ await load(true); }
+  catch(e){ $('#mine').innerHTML = `<div class="empty">Could not load.</div>`; return; }
+  let deb;
+  $('#q').addEventListener('input', e => {
+    clearTimeout(deb);
+    deb = setTimeout(() => { query = e.target.value.trim(); load(true).catch(()=>{}); }, 300);
+  });
+}
+
+/* ================= settings ================= */
+function renderSettings(){
+  const app = $('#app');
+  if (!me){ go('/login'); return; }
+  app.innerHTML =
+  `<div class="card"><div class="h">Change password</div>
+    <div class="sub">Pick something strong.</div>
+    <label class="label">Current password</label><input class="input" id="s-cur" type="password" autocomplete="current-password">
+    <label class="label">New password</label><input class="input" id="s-new" type="password" autocomplete="new-password" placeholder="min. 8 characters">
+    <div class="err" id="s-err"></div><div class="okmsg" id="s-ok"></div>
+    <button class="cta" id="s-go">Update password</button></div>
+   <div class="card"><div class="h">Export my data</div>
+    <div class="sub">Download every paste in your space as JSON.</div>
+    <button class="btn" id="s-exp" style="width:100%">${I.download} Download export</button></div>
+   <div class="card danger-zone"><div class="h">Delete account</div>
+    <div class="sub">Removes your account, all sessions, and every paste — forever. This cannot be undone.</div>
+    <button class="btn danger" id="s-del" style="width:100%">${I.trash} Delete my account</button></div>`;
+  $('#s-go').onclick = async () => {
+    const err = $('#s-err'), ok = $('#s-ok'), btn = $('#s-go');
+    err.style.display = 'none'; ok.style.display = 'none';
+    btn.disabled = true; btn.textContent = 'Updating…';
+    try{
+      await api('/api/auth/change-password', { method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ current: $('#s-cur').value, new: $('#s-new').value }) });
+      ok.textContent = 'Password updated. Other devices were logged out.';
+      ok.style.display = 'block';
+      $('#s-cur').value = ''; $('#s-new').value = '';
+      toast('Password updated');
+    }catch(e){ err.textContent = e.message; err.style.display = 'block'; }
+    btn.disabled = false; btn.textContent = 'Update password';
+  };
+  $('#s-exp').onclick = () => { window.location.href = '/api/export'; };
+  $('#s-del').onclick = () => {
+    openModal(`<div class="h">Delete account?</div>
+      <div class="sub">Everything goes: your account, sessions, and all pastes. Type your password to confirm.</div>
+      <label class="label">Password</label><input class="input" id="d-pass" type="password">
+      <div class="err" id="d-err"></div>
+      <div class="modal-btns"><button class="btn" id="d-cancel">Cancel</button>
+      <button class="btn pri" id="d-ok" style="background:var(--danger);border-color:var(--danger);color:#fff">Delete everything</button></div>`);
+    $('#d-cancel').onclick = closeModal;
+    $('#d-ok').onclick = async () => {
+      const err = $('#d-err'); err.style.display = 'none';
+      try{
+        await api('/api/auth/account', { method:'DELETE',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ password: $('#d-pass').value }) });
+        me = null; closeModal(); toast('Account deleted'); go('/');
+      }catch(e){ err.textContent = e.message; err.style.display = 'block'; }
+    };
+  };
 }
 
 /* ================= view ================= */
@@ -462,7 +516,7 @@ async function renderView(id){
   try{ p = await api('/api/paste/' + id); }
   catch(e){
     app.innerHTML = `<div class="card"><div class="h">Not found</div>
-      <div class="sub">This paste does not exist or has expired.</div>
+      <div class="sub">This paste does not exist, has expired, or is private.</div>
       <button class="cta" data-nav href="/">Create a new paste</button></div>`;
     return;
   }
@@ -474,7 +528,7 @@ async function renderView(id){
      <span class="pid">/${p.id}</span></div>
    <div class="meta"><span>${ago(p.created_at)}</span><span>·</span><span>expires ${until(p.expires_at)}</span>
      <span>·</span><span>${p.views} views</span><span>·</span><span class="chip">${esc(syntaxLabel(p.syntax))}</span>
-     ${p.visibility === 'unlisted' ? '<span>·</span><span class="chip dim">' + I.lock.replace('width="16" height="16"','width="11" height="11"') + ' unlisted</span>' : ''}</div>
+     <span>·</span>${visChip(p.visibility)}</div>
    <pre class="code"><code id="code"></code></pre>
    <div class="actions">
      <button class="btn pri" id="b-copy">${I.copy} Copy link</button>
@@ -505,7 +559,7 @@ async function renderView(id){
     $('#b-del').onclick = () => confirmModal('Delete paste?', `"${p.title || 'untitled'}" will be gone forever.`, 'Delete', async () => {
       try{ await api('/api/paste/' + p.id, { method:'DELETE' }); toast('Paste deleted', I.trash); go('/my'); }
       catch(e){ toast(e.message, I.x); }
-    });
+    }, true);
   }
 }
 
@@ -532,19 +586,23 @@ async function renderEdit(id){
    <div><label class="label">Expires</label><select class="sel" id="e-exp">${
      EXPIRY.map(x=>{
        const cur = p.expires_at ? Math.round((p.expires_at - Date.now())/1000) : '';
-       const sel = (x[0]==='' && !p.expires_at) || Math.abs((x[0]||0) - (cur||0)) < 60 ? ' selected' : '';
+       const sel = (x[0]==='' && !p.expires_at) || (x[0]!=='' && Math.abs(x[0] - cur) < 90) ? ' selected' : '';
        return `<option value="${x[0]}"${sel}>${x[1]}</option>`; }).join('')}</select></div></div>
-   <label class="label">Visibility</label>
-   <div class="seg" id="e-vis"><button class="${p.visibility==='public'?'on':''}" data-v="public">Public</button>
-     <button class="${p.visibility==='unlisted'?'on':''}" data-v="unlisted">Unlisted</button></div>
+   <label class="label">Who can open it</label>
+   <div class="visgrid" id="e-vis">
+     <button class="visopt${p.visibility==='private'?' on':''}" data-v="private"><span class="vt">${I.lock} Private</span>
+       <span class="vd">Only you.</span></button>
+     <button class="visopt${p.visibility==='unlisted'?' on':''}" data-v="unlisted"><span class="vt">${I.link} Link only</span>
+       <span class="vd">Anyone with the link.</span></button>
+   </div>
    <div class="err" id="e-err"></div>
    <div style="display:flex;gap:10px"><button class="btn" data-nav href="/${p.id}" style="margin-top:18px">Cancel</button>
    <button class="cta" id="e-save" style="margin-top:18px">Save changes</button></div></div>`;
   let vis = p.visibility;
   $('#e-vis').addEventListener('click', e => {
-    const b = e.target.closest('button'); if(!b) return;
+    const b = e.target.closest('.visopt'); if(!b) return;
     vis = b.dataset.v;
-    $('#e-vis').querySelectorAll('button').forEach(x=>x.classList.toggle('on', x===b));
+    $('#e-vis').querySelectorAll('.visopt').forEach(x=>x.classList.toggle('on', x===b));
   });
   const errBox = $('#e-err');
   $('#e-save').onclick = async () => {
