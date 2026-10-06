@@ -1,1 +1,1 @@
-{"description":"Snip — minimal pastebin. Paste text or code, get a link.","engines":{"node":">=22"},"license":"MIT","main":"server.js","name":"snip","scripts":{"start":"node server.js"},"version":"1.0.0"}
+{"description":"Snip — minimal pastebin. Paste text or code, get a link.","engines":{"node":">=22"},"license":"MIT","main":"server.js","name":"snip","scripts":{"start":"node server.js"},"version":"2.0.0"}
