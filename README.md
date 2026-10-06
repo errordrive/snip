@@ -1,9 +1,14 @@
-# Snip v2 — paste · share · raw
+# Snip v3 — private pastebin · paste · share · raw
 
-A minimal pastebin **with accounts**. Paste text or code, get a short link, share it.
-Raw view serves pure `text/plain` — perfect for `curl`.
+A minimal pastebin **with private spaces**. Every account gets its own private space —
+nobody can see another user's pastes. A paste is visible to others **only** via its link.
 
-**Stack:** Node.js (zero dependencies, built-in `node:sqlite`) + single SQLite file.
+**Privacy model**
+- `private` (default) — only you can open it, even with the link.
+- `unlisted` — anyone with the link can open it. Not listed anywhere.
+- There is **no public feed**. Nothing is discoverable.
+
+**Stack:** Node.js (zero dependencies, built-in `node:sqlite`) + single SQLite file (WAL mode).
 One process serves the frontend, the JSON API, and raw output.
 
 ## Features
@@ -49,18 +54,32 @@ No build step, no `npm install`.
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/paste` | Create. Body: `{title, content, syntax, visibility, expires_in}` → `{id, url, raw_url}` |
-| `GET` | `/api/paste/:id` | Paste JSON (counts a view) |
-| `GET` | `/api/recent` | 20 latest public pastes |
-| `GET` | `/raw/:id` | Raw `text/plain` content |
+| `GET` | `/api/health` | Health check → `{ok, version}` |
+| `POST` | `/api/auth/signup` | `{username, password}` → creates account + session |
+| `POST` | `/api/auth/login` | `{username, password}` → session |
+| `POST` | `/api/auth/logout` | Destroys session |
+| `GET` | `/api/auth/me` | Current user or 401 |
+| `POST` | `/api/auth/change-password` | `{current, new}` → also logs out other devices |
+| `DELETE` | `/api/auth/account` | `{password}` → deletes account + all pastes + sessions |
+| `GET` | `/api/export` | Download all your pastes as JSON |
+| `POST` | `/api/paste` | Create. `{title, content, syntax, visibility, expires_in}` → `{id, url, raw_url}` |
+| `GET` | `/api/paste/:id` | Paste JSON (access-checked, counts a view) |
+| `PUT` | `/api/paste/:id` | Edit (owner only) |
+| `DELETE` | `/api/paste/:id` | Delete (owner only) |
+| `GET` | `/api/my?q=&limit=&offset=` | Your pastes, searchable, paginated |
+| `GET` | `/raw/:id` | Raw `text/plain` (access-checked) |
 | `GET` | `/:id` | View page |
 
-`expires_in` is seconds: `600` / `3600` / `86400` / `604800`, or `null` for never.
-`visibility` is `public` or `unlisted`. Max paste size 512 KB.
-Creating is rate-limited: 20 pastes / 10 min / IP.
+`visibility` is `private` (default) or `unlisted`. `expires_in` is seconds
+(`600` / `3600` / `86400` / `604800`) or `null` for never.
+Guest pastes are always link-only and auto-delete after 7 days. Max paste size 512 KB.
 
-## Notes
+## Production notes
 
-- Expired pastes are deleted lazily on read + by an hourly sweep.
-- Syntax highlighting via highlight.js (CDN) with a minimal monochrome theme.
-- English-only UI, light/dark mode, no account needed.
+- Passwords: scrypt hashing. Sessions: 30-day HttpOnly + SameSite=Lax cookies (Secure on HTTPS), sha256-stored tokens.
+- Rate limits: 20 pastes / 10 min / IP, 10 auth attempts / 10 min / IP.
+- Security headers on all responses (nosniff, DENY framing, no-referrer, CSP on HTML);
+  paste pages and raw output send `X-Robots-Tag: noindex, nofollow`.
+- SQLite WAL mode + busy timeout; expired pastes and sessions swept hourly;
+  graceful shutdown on SIGTERM.
+- Expired pastes are deleted lazily on read + by the hourly sweep.
