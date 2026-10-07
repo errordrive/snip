@@ -16,7 +16,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
 
-const VERSION = '4.0.0';
+const VERSION = '5.0.0';
 const PORT = Number(process.env.PORT || 3000);
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'snip.db');
 const PUBLIC = path.join(__dirname, 'public');
